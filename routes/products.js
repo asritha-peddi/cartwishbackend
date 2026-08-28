@@ -25,7 +25,7 @@ router.get("/featured", async (req, res) => {
 
     return res.json(featuredProducts);
   } catch (error) {
-    console.error(error);
+    console.error(err);
     res.status(500).json({ message: "Server Error" });
   }
 });
@@ -42,7 +42,7 @@ router.get("/suggestions", async (req, res) => {
 
     res.json(products);
   } catch (error) {
-    console.error(error);
+    console.error(err);
     res.status(500).send("Server error");
   }
 });
@@ -60,7 +60,7 @@ router.get("/:id", async (req, res) => {
 
     res.json(product);
   } catch (error) {
-    console.error(error);
+    console.error(err);
     res.status(500).json({ message: "Server Error" });
   }
 });
@@ -114,7 +114,7 @@ router.get("/", async (req, res) => {
       totalPages,
     });
   } catch (error) {
-    console.error(error);
+    console.error(err);
     res.status(500).json({ message: "Server Error" });
   }
 });
@@ -135,7 +135,7 @@ router.post("/", async (req, res) => {
     await newProduct.save();
     res.status(201).json(newProduct);
   } catch (err) {
-    console.error(error);
+    console.error(err);
     res.status(500).json({ message: "Server Error" });
   }
 });
@@ -146,7 +146,7 @@ router.delete("/:id", auth, admin, async (req, res) => {
     await Products.findByIdAndDelete(req.params.id);
     res.json({ message: "Product Deleted Successfully!" });
   } catch (err) {
-    console.error(error);
+    console.error(err);
     res.status(500).json({ message: "Server Error" });
   }
 });
