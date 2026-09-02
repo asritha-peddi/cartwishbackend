@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cartwish-backend
+  labels:
+    app: cartwish-backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: cartwish-backend
+  template:
+    metadata:
+      labels:
+        app: cartwish-backend
+    spec:
+      containers:
+        - name: cartwish-backend
+          image: cartwish-backend:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 5000
+          envFrom:
+            - secretRef:
+                name: cartwish-backend-secret
