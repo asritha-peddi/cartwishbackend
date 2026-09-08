@@ -1,0 +1,14 @@
+replicaCount: 2
+
+image:
+  repository: cartwish-backend
+  pullPolicy: Never
+  tag: "latest"
+
+service:
+  type: NodePort
+  port: 5000
+
+containerPort: 5000
+
+secretName: cartwish-backend-secret
