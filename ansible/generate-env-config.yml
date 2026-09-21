@@ -1,0 +1,30 @@
+---
+- name: Cartwish - generate environment config from a template
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    app_name: cartwish-backend
+    app_port: 5000
+    node_env: production
+    db_name: cartwish
+
+  tasks:
+    - name: Create output directory
+      file:
+        path: /ansible/generated
+        state: directory
+
+    - name: Generate app config file from template
+      template:
+        src: /ansible/app-config.j2
+        dest: /ansible/generated/app-config.env
+
+    - name: Show the generated file
+      command: cat /ansible/generated/app-config.env
+      register: result
+
+    - name: Display generated config
+      debug:
+        msg: "{{ result.stdout_lines }}"

@@ -1,0 +1,16 @@
+---
+- name: Cartwish - basic Ansible test
+  hosts: localhost
+  connection: local
+  tasks:
+    - name: Print a greeting
+      debug:
+        msg: "Ansible is working for the Cartwish project!"
+
+    - name: Show current date and time
+      command: date
+      register: current_date
+
+    - name: Display the date
+      debug:
+        var: current_date.stdout
