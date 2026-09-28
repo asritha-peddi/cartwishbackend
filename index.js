@@ -1,6 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const bodyParser = require("body-parser");
+const mongoose = require("mongoose");
 require("dotenv").config();
 require("./db/connectDB");
 
@@ -21,6 +22,28 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use("/category", express.static(__dirname + "/upload/category"));
 app.use("/profile", express.static(__dirname + "/upload/profiles"));
 app.use("/products", express.static(__dirname + "/upload/products"));
+
+// Kubernetes health checks
+app.get("/health", (req, res) => {
+    res.status(200).json({
+        status: "healthy",
+        uptime: process.uptime()
+    });
+});
+
+app.get("/ready", (req, res) => {
+    if (mongoose.connection.readyState === 1) {
+        return res.status(200).json({
+            status: "ready",
+            database: "connected"
+        });
+    }
+
+    return res.status(503).json({
+        status: "not ready",
+        database: "disconnected"
+    });
+});
 
 // adding routes
 app.use("/api/user", userRoutes);
