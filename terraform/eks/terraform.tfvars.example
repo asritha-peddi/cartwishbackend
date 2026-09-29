@@ -1,0 +1,5 @@
+aws_region         = "ap-south-1"
+project_name       = "cartwish"
+environment        = "dev"
+cluster_version    = "1.33"
+node_instance_type = "t3.small"
