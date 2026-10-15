@@ -7,8 +7,16 @@ pipeline {
     }
 
     environment {
-        IMAGE_NAME = 'cartwish-backend'
-        DEPLOYMENT_NAME = 'cartwish-backend'
+        IMAGE_NAME = "cartwish-backend"
+        EXPECTED_CLUSTER_UID = "34cb2996-f9ca-49d2-bcc7-811de319af63"
+
+        DOCKER = "C:\\Program Files\\Docker\\Docker\\resources\\bin\\docker.exe"
+        KUBECTL = "C:\\Program Files\\Docker\\Docker\\resources\\bin\\kubectl.exe"
+        MINIKUBE = "C:\\Program Files\\Kubernetes\\Minikube\\minikube.exe"
+
+        KUBECONFIG = "C:\\Users\\VENU MADHAVI\\.kube\\config"
+        MINIKUBE_HOME = "C:\\Users\\VENU MADHAVI"
+        USERPROFILE = "C:\\Users\\VENU MADHAVI"
     }
 
     stages {
@@ -19,54 +27,133 @@ pipeline {
             }
         }
 
-        stage('Verify Tools') {
+        stage('Verify Cluster Identity') {
             steps {
-                bat 'docker --version'
-                bat 'kubectl version --client'
-                bat 'minikube version'
-                bat 'node --version'
-                bat 'npm --version'
+                script {
+                    def clusterUid = bat(
+                        script: '@"%KUBECTL%" --context=minikube get namespace kube-system -o jsonpath="{.metadata.uid}"',
+                        returnStdout: true
+                    ).trim()
+
+                    echo "Jenkins cluster UID: ${clusterUid}"
+
+                    if (clusterUid != env.EXPECTED_CLUSTER_UID) {
+                        error('Cluster UID mismatch.')
+                    }
+                }
             }
         }
 
-        stage('Install and Validate Backend') {
+        stage('Set Image Tag') {
             steps {
-                bat 'npm ci'
-                bat 'node --check index.js'
+                script {
+                    def shortCommit = bat(
+                        script: '@git rev-parse --short=12 HEAD',
+                        returnStdout: true
+                    ).trim()
+
+                    env.IMAGE_TAG = "build-${env.BUILD_NUMBER}-${shortCommit}"
+                    currentBuild.description = env.IMAGE_TAG
+                }
+
+                echo "Building ${env.IMAGE_NAME}:${env.IMAGE_TAG}"
             }
         }
 
         stage('Build Docker Image') {
             steps {
-                bat 'docker build -t %IMAGE_NAME%:latest .'
+                bat '"%DOCKER%" build -t "%IMAGE_NAME%:%IMAGE_TAG%" .'
+            }
+        }
+
+        stage('Export Image Archive') {
+            steps {
+                bat '''
+@echo on
+if exist backend-image.tar del /f backend-image.tar
+"%DOCKER%" image save --output "%WORKSPACE%\\backend-image.tar" "%IMAGE_NAME%:%IMAGE_TAG%"
+if errorlevel 1 exit /b 1
+'''
             }
         }
 
         stage('Load Image into Minikube') {
             steps {
-                bat 'minikube image load %IMAGE_NAME%:latest'
+                bat '''
+@echo on
+"%MINIKUBE%" -p minikube image load --overwrite=true "%WORKSPACE%\\backend-image.tar"
+if errorlevel 1 exit /b 1
+'''
             }
         }
 
-        stage('Deploy to Kubernetes') {
+        stage('Verify Image in Minikube') {
             steps {
-                bat 'kubectl rollout restart deployment/%DEPLOYMENT_NAME%'
-                bat 'kubectl rollout status deployment/%DEPLOYMENT_NAME% --timeout=120s'
+                script {
+                    def imageList = bat(
+                        script: '@"%MINIKUBE%" -p minikube image ls',
+                        returnStdout: true
+                    ).trim()
+
+                    writeFile(
+                        file: 'minikube-images.txt',
+                        text: imageList + '\n'
+                    )
+
+                    echo "Minikube images:\n${imageList}"
+
+                    def expectedImage = (
+                        env.IMAGE_NAME + ':' + env.IMAGE_TAG
+                    ).toString()
+
+                    def found = false
+
+                    for (def line : imageList.readLines()) {
+                        def normalized = line.trim()
+                            .replaceFirst('^docker\\.io/', '')
+                            .replaceFirst('^library/', '')
+
+                        if (normalized == expectedImage) {
+                            found = true
+                        }
+                    }
+
+                    if (!found) {
+                        error("Image missing from Minikube: ${expectedImage}")
+                    }
+
+                    echo "Verified image: ${expectedImage}"
+                }
+            }
+        }
+
+        stage('Save Image Reference') {
+            steps {
+                writeFile(
+                    file: 'image-reference.txt',
+                    text: "${env.IMAGE_NAME}:${env.IMAGE_TAG}\n"
+                )
+
+                archiveArtifacts(
+                    artifacts: 'image-reference.txt,minikube-images.txt',
+                    fingerprint: true
+                )
             }
         }
     }
 
     post {
         success {
-            echo 'Backend pipeline completed successfully.'
+            echo "Image verified in Minikube: ${env.IMAGE_NAME}:${env.IMAGE_TAG}"
+
+            bat '''
+@echo off
+if exist backend-image.tar del /f backend-image.tar
+'''
         }
 
         failure {
-            echo 'Backend pipeline failed. Review the stage logs.'
-        }
-
-        always {
-            bat 'kubectl get pods || exit 0'
+            echo 'Backend pipeline failed. Review the first error in Console Output.'
         }
     }
 }
