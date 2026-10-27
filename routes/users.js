@@ -10,18 +10,18 @@ const _ = require("lodash");
 const User = require("../models/users");
 const auth = require("../middleware/auth");
 
-// LoggedIN user profile
+// Logged-in user profile
 router.get("/me", auth, async (req, res) => {
     try {
         const user = await User.findById(req.user._id).select("-password");
         return res.send(user);
     } catch (err) {
         console.error(err.message);
-        res.status(500).json({ message: "Server error" });
+        return res.status(500).json({ message: "Server error" });
     }
 });
 
-// Setting up multer
+// Profile image upload
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
         cb(null, "upload/profiles");
@@ -29,125 +29,119 @@ const storage = multer.diskStorage({
     filename: (req, file, cb) => {
         const ext = path.extname(file.originalname);
         const filename = file.fieldname + "-" + Date.now() + ext;
+        req.filename = filename;
         cb(null, filename);
-        req.filename = filename; // save filename in request object
     },
 });
+
 const upload = multer({ storage });
 
-// Create user and return JWT token
-// router.post("/signup", upload.single("profilePic"), async (req, res) => { originally used single file upload
+// Signup
+router.post(
+    "/signup",
+    upload.fields([{ name: "profilePic", maxCount: 1 }]),
+    async (req, res) => {
+        const { name, email, password, deliveryAddress, account } = req.body;
+        const profilePicFile = req.files?.profilePic?.[0]?.filename;
 
-    router.post("/signup", upload.fields([{ name: "profilePic", maxCount: 1 }]), async (req, res) => {
-  const { name, email, password, deliveryAddress, account } = req.body;
+        try {
+            let user = await User.findOne({ email });
 
-  // 👇 Safely access uploaded file
-  const profilePicFile = req.files?.profilePic?.[0]?.filename;
+            if (user) {
+                if (profilePicFile) {
+                    const filePath = path.join(
+                        "upload",
+                        "profiles",
+                        profilePicFile
+                    );
+                    fs.unlinkSync(filePath);
+                }
 
-    try {
-        // Check if the email is already registered
-        let user = await User.findOne({ email });
-        if (user) {
-            // Delete the uploaded file since the API was not successful
-            // if (req.files) { originally used single file upload
-            if (profilePicFile) {
-                // const filePath = path.join("upload", "profiles", req.filename);
-                const filePath = path.join("upload", "profiles", profilePicFile);
-                fs.unlinkSync(filePath);
+                return res.status(400).json({
+                    message: "Email is already registered",
+                });
             }
 
-            return res
-                .status(400)
-                .json({ message: "Email is already registered" });
+            user = new User({
+                name,
+                email,
+                password,
+                deliveryAddress,
+                account,
+                profilePic: profilePicFile || "default.jpg",
+                isAdmin: false,
+            });
+
+            const salt = await bcrypt.genSalt(10);
+            user.password = await bcrypt.hash(password, salt);
+
+            await user.save();
+
+            const tokenPayload = _.pick(user, [
+                "_id",
+                "name",
+                "email",
+                "profilePic",
+                "deliveryAddress",
+                "account",
+                "isAdmin",
+            ]);
+
+            const token = jwt.sign(
+                tokenPayload,
+                process.env.JWTSECRET,
+                { expiresIn: 3600 }
+            );
+
+            return res.status(201).json({ token });
+        } catch (err) {
+            console.error(err.message);
+            return res.status(500).json({ message: "Server error" });
         }
-
-        // Create the new user
-        user = new User({
-            name,
-            email,
-            password,
-            deliveryAddress,
-            account,
-            // profilePic: req.file ? req.filename : "default.jpg", originally used single file upload
-            profilePic: profilePicFile || "default.jpg", 
-            isAdmin: false,            
-        });
-
-        // Hash the password
-        const salt = await bcrypt.genSalt(10);
-        user.password = await bcrypt.hash(password, salt);
-
-        // Save the user
-        await user.save();
-
-        // Create and return JWT token
-        let newUser = _.pick(user, [
-            "_id",
-            "name",
-            "email",
-            "profilePic",
-            "deliveryAddress",
-            "password",
-            "account",
-            "isAdmin",
-        ]);
-
-        jwt.sign(
-            newUser,
-            process.env.JWTSECRET,
-            { expiresIn: 3600 },
-            (err, token) => {
-                if (err) throw err;
-                return res.status(201).json({ token });
-            }
-        );
-    } catch (err) {
-        console.error(err.message);
-        res.status(500).json({ message: "Server error" });
     }
-});
+);
 
-// User login
+// Login
 router.post("/login", async (req, res) => {
     const { email, password } = req.body;
 
     try {
-        // Check if the email is registered
         const user = await User.findOne({ email });
+
         if (!user) {
-            return res.status(400).json({ message: "Invalid credentials" });
+            return res.status(400).json({
+                message: "Invalid credentials",
+            });
         }
 
-        // Check the password
         const isMatch = await bcrypt.compare(password, user.password);
+
         if (!isMatch) {
-            return res.status(400).json({ message: "Invalid credentials" });
+            return res.status(400).json({
+                message: "Invalid credentials",
+            });
         }
 
-        // Create and return JWT token
-        let newUser = _.pick(user, [
+        const tokenPayload = _.pick(user, [
             "_id",
             "name",
             "email",
             "deliveryAddress",
-            "password",
             "account",
             "profilePic",
             "isAdmin",
         ]);
 
-        jwt.sign(
-            newUser,
+        const token = jwt.sign(
+            tokenPayload,
             process.env.JWTSECRET,
-            { expiresIn: 3600 },
-            (err, token) => {
-                if (err) throw err;
-                return res.json({ token });
-            }
+            { expiresIn: 3600 }
         );
+
+        return res.json({ token });
     } catch (err) {
         console.error(err.message);
-        res.status(500).json({ message: "Server error" });
+        return res.status(500).json({ message: "Server error" });
     }
 });
 

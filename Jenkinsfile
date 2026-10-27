@@ -22,8 +22,7 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                git branch: 'main',
-                    url: 'https://github.com/asritha-peddi/cartwishbackend.git'
+                checkout scm
             }
         }
 
@@ -74,6 +73,41 @@ if exist backend-image.tar del /f backend-image.tar
 "%DOCKER%" image save --output "%WORKSPACE%\\backend-image.tar" "%IMAGE_NAME%:%IMAGE_TAG%"
 if errorlevel 1 exit /b 1
 '''
+            }
+        }
+
+        stage('Trivy Security Scan') {
+            steps {
+                bat '''
+@echo off
+if exist trivy-report.txt del /f trivy-report.txt
+
+"%DOCKER%" run --rm ^
+  --mount "type=bind,source=%WORKSPACE%,target=/scan" ^
+  --mount "type=volume,source=cartwish-backend-trivy-cache,target=/root/.cache/trivy" ^
+  aquasec/trivy:0.76.1 image ^
+  --input /scan/backend-image.tar ^
+  --scanners vuln ^
+  --severity HIGH,CRITICAL ^
+  --exit-code 1 ^
+  --format table ^
+  --output /scan/trivy-report.txt ^
+  --no-progress ^
+  --timeout 10m
+
+set "SCAN_EXIT=%ERRORLEVEL%"
+if exist trivy-report.txt type trivy-report.txt
+exit /b %SCAN_EXIT%
+'''
+            }
+            post {
+                always {
+                    archiveArtifacts(
+                        artifacts: 'trivy-report.txt',
+                        allowEmptyArchive: true,
+                        fingerprint: true
+                    )
+                }
             }
         }
 

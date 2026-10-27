@@ -3,7 +3,7 @@ replicaCount: 2
 image:
   repository: cartwish-backend
   pullPolicy: Never
-  tag: "build-8-6a8d7bf7d06b"
+  tag: "build-9-fc9f37ca5e80"
 
 service:
   type: NodePort
