@@ -22,8 +22,7 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                git branch: 'security/backend-image-hardening',
-                    url: 'https://github.com/asritha-peddi/cartwishbackend.git'
+                checkout scm
             }
         }
 
